@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Review System - Full Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div id="app"></div>
+
+    <script>
+        let app;
+
+        class BackendAPI {
+            constructor() {
+                this.users = [
+                    { id: '1', email: 'employee@company.com', password: 'employee123', firstName: 'Alice', lastName: 'Johnson', role: 'employee', department: 'Engineering', managerId: '2', hireDate: '2021-03-10' },
+                    { id: '2', email: 'manager@company.com', password: 'manager123', firstName: 'Bob', lastName: 'Smith', role: 'manager', department: 'Engineering', managerId: '3', hireDate: '2020-06-01' },
+                    { id: '3', email: 'admin@company.com', password: 'admin123', firstName: 'Carol', lastName: 'White', role: 'admin', department: 'Leadership', managerId: null, hireDate: '2020-01-15' },
+                    { id: '4', email: 'david@company.com', password: 'employee123', firstName: 'David', lastName: 'Lee', role: 'employee', department: 'Engineering', managerId: '2', hireDate: '2021-09-20' },
+                    { id: '5', email: 'emma@company.com', password: 'employee123', firstName: 'Emma', lastName: 'Wilson', role: 'employee', department: 'Engineering', managerId: '2', hireDate: '2022-01-15' },
+                ];
+                
+                this.goals = [
+                    { id: '1', employeeId: '1', title: 'Complete API Migration', description: 'Migrate legacy APIs to REST', kpi: 'APIs Migrated', target: 10, current: 7, status: 'in-progress', targetDate: '2026-03-31', priority: 'high', startDate: '2026-01-01' },
+                    { id: '2', employeeId: '1', title: 'Improve Code Coverage', description: 'Increase unit test coverage', kpi: 'Coverage %', target: 85, current: 72, status: 'in-progress', targetDate: '2026-04-15', priority: 'medium', startDate: '2026-01-01' },
+                    { id: '3', employeeId: '4', title: 'Deploy Microservices', description: 'Launch 3 new microservices', kpi: 'Services Deployed', target: 3, current: 3, status: 'completed', targetDate: '2026-02-28', priority: 'high', startDate: '2026-01-01' },
+                    { id: '4', employeeId: '4', title: 'Database Optimization', description: 'Optimize query performance', kpi: 'Query Time (ms)', target: 50, current: 38, status: 'in-progress', targetDate: '2026-03-15', priority: 'high', startDate: '2026-01-10' },
+                    { id: '5', employeeId: '5', title: 'Security Audit', description: 'Complete security vulnerability scan', kpi: 'Issues Fixed', target: 20, current: 12, status: 'in-progress', targetDate: '2026-03-20', priority: 'high', startDate: '2026-01-05' },
+                ];
+                
+                this.feedback = [
+                    { id: '1', employeeId: '1', managerId: '2', rating: 4, comments: 'Excellent progress on API migration. Great technical skills and problem-solving ability.', date: '2026-01-15', type: 'quarterly' },
+                    { id: '2', employeeId: '4', managerId: '2', rating: 5, comments: 'Outstanding work on microservices deployment. Exceeded expectations and showed great initiative.', date: '2026-01-18', type: 'quarterly' },
+                    { id: '3', employeeId: '1', managerId: '2', rating: 4, comments: 'Strong team player. Consistently delivers quality work on time.', date: '2026-01-20', type: 'general' },
+                    { id: '4', employeeId: '5', managerId: '2', rating: 3, comments: 'Good progress on security audit. Needs to improve communication with stakeholders.', date: '2026-01-22', type: 'general' },
+                    { id: '5', employeeId: '4', managerId: '2', rating: 5, comments: 'Exceptional database optimization work. Reduced query times significantly.', date: '2026-01-25', type: 'project' },
+                ];
+
+                this.currentToken = null;
+                this.currentUser = null;
+            }
+
+            login(email, password) {
+                const user = this.users.find(u => u.email === email && u.password === password);
+                if (!user) throw new Error('Invalid credentials');
+                this.currentToken = 'mock-jwt-token-' + user.id;
+                this.currentUser = { ...user };
+                delete this.currentUser.password;
+                return { user: this.currentUser, token: this.currentToken };
+            }
+
+            logout() {
+                this.currentToken = null;
+                this.currentUser = null;
+            }
+
+            getGoals() {
+                if (!this.currentUser) throw new Error('Not authenticated');
+                let goals = [...this.goals];
+                if (this.currentUser.role === 'employee') {
+                    goals = goals.filter(g => g.employeeId === this.currentUser.id);
+                } else if (this.currentUser.role === 'manager') {
+                    const directReports = this.users.filter(u => u.managerId === this.currentUser.id).map(u => u.id);
+                    goals = goals.filter(g => g.employeeId === this.currentUser.id || directReports.includes(g.employeeId));
+                }
+                return goals.map(g => {
+                    const employee = this.users.find(u => u.id === g.employeeId);
+                    return { ...g, employeeName: employee.firstName + ' ' + employee.lastName, department: employee.department };
+                });
+            }
+
+            createGoal(goalData) {
+                if (!this.currentUser) throw new Error('Not authenticated');
+                const newGoal = {
+                    id: String(this.goals.length + 1),
+                    employeeId: this.currentUser.role === 'employee' ? this.currentUser.id : goalData.employeeId,
+                    ...goalData,
+                    current: 0,
+                    status: 'in-progress',
+                    startDate: new Date().toISOString().split('T')[0]
+                };
+                this.goals.push(newGoal);
+                return newGoal;
+            }
+
+            updateGoal(goalId, updates) {
+                const goalIndex = this.goals.findIndex(g => g.id === goalId);
+                if (goalIndex === -1) throw new Error('Goal not found');
+                this.goals[goalIndex] = { ...this.goals[goalIndex], ...updates };
+                if (updates.current >= this.goals[goalIndex].target) {
+                    this.goals[goalIndex].status = 'completed';
+                }
+                return this.goals[goalIndex];
+            }
+
+            deleteGoal(goalId) {
+                const index = this.goals.findIndex(g => g.id === goalId);
+                if (index === -1) throw new Error('Goal not found');
+                this.goals.splice(index, 1);
+            }
+
+            getFeedback() {
+                if (!this.currentUser) throw new Error('Not authenticated');
+                let feedback = [...this.feedback];
+                if (this.currentUser.role === 'employee') {
+                    feedback = feedback.filter(f => f.employeeId === this.currentUser.id);
+                } else if (this.currentUser.role === 'manager') {
+                    const directReports = this.users.filter(u => u.managerId === this.currentUser.id).map(u => u.id);
+                    feedback = feedback.filter(f => f.employeeId === this.currentUser.id || directReports.includes(f.employeeId) || f.managerId === this.currentUser.id);
+                }
+                return feedback.map(f => {
+                    const employee = this.users.find(u => u.id === f.employeeId);
+                    const manager = this.users.find(u => u.id === f.managerId);
+                    return { ...f, employeeName: employee.firstName + ' ' + employee.lastName, managerName: manager.firstName + ' ' + manager.lastName };
+                });
+            }
+
+            createFeedback(feedbackData) {
+                if (!this.currentUser) throw new Error('Not authenticated');
+                if (!['manager', 'admin'].includes(this.currentUser.role)) {
+                    throw new Error('Only managers and admins can create feedback');
+                }
+                const newFeedback = {
+                    id: String(this.feedback.length + 1),
+                    managerId: this.currentUser.id,
+                    ...feedbackData,
+                    date: new Date().toISOString().split('T')[0]
+                };
+                this.feedback.push(newFeedback);
+                return newFeedback;
+            }
+
+            getPerformanceScores() {
+                if (!this.currentUser) throw new Error('Not authenticated');
+                if (!['manager', 'admin'].includes(this.currentUser.role)) {
+                    throw new Error('Unauthorized');
+                }
+                const employees = this.users.filter(u => u.role === 'employee');
+                return employees.map(emp => {
+                    const empGoals = this.goals.filter(g => g.employeeId === emp.id);
+                    const empFeedback = this.feedback.filter(f => f.employeeId === emp.id);
+                    const goalScore = empGoals.length > 0 ? empGoals.reduce((acc, g) => acc + Math.min((g.current / g.target) * 100, 100), 0) / empGoals.length : 0;
+                    const feedbackScore = empFeedback.length > 0 ? (empFeedback.reduce((acc, f) => acc + f.rating, 0) / empFeedback.length) * 20 : 0;
+                    const overallScore = Math.round(goalScore * 0.6 + feedbackScore * 0.4);
+                    return {
+                        id: emp.id,
+                        name: emp.firstName + ' ' + emp.lastName,
+                        department: emp.department,
+                        totalGoals: empGoals.length,
+                        completedGoals: empGoals.filter(g => g.status === 'completed').length,
+                        goalScore: Math.round(goalScore),
+                        feedbackScore: Math.round(feedbackScore),
+                        overallScore,
+                        recommendation: this.getPromotion(overallScore)
+                    };
+                });
+            }
+
+            getPromotion(score) {
+                if (score >= 90) return 'Highly Recommended';
+                if (score >= 75) return 'Recommended';
+                if (score >= 60) return 'Consider';
+                return 'Not Ready';
+            }
+        }
+
+        const api = new BackendAPI();
+
+        class App {
+            constructor() {
+                this.state = {
+                    isAuthenticated: false,
+                    currentUser: null,
+                    activeTab: 'dashboard',
+                    goals: [],
+                    feedback: [],
+                    analytics: null,
+                    showNewGoalForm: false,
+                    showNewFeedbackForm: false,
+                    newGoal: { title: '', description: '', targetDate: '', kpi: '', target: '', priority: 'medium' },
+                    newFeedback: { employeeId: '', rating: 5, comments: '' }
+                };
+                this.charts = {};
+                this.render();
+            }
+
+            setState(updates) {
+                this.state = { ...this.state, ...updates };
+                this.render();
+            }
+
+            login(email, password) {
+                try {
+                    const response = api.login(email, password);
+                    this.setState({ isAuthenticated: true, currentUser: response.user });
+                    this.loadData();
+                } catch (error) {
+                    alert(error.message);
+                }
+            }
+
+            logout() {
+                api.logout();
+                Object.values(this.charts).forEach(chart => chart && chart.destroy());
+                this.charts = {};
+                this.setState({
+                    isAuthenticated: false,
+                    currentUser: null,
+                    activeTab: 'dashboard',
+                    goals: [],
+                    feedback: [],
+                    analytics: null,
+                    showNewGoalForm: false,
+                    showNewFeedbackForm: false
+                });
+            }
+
+            loadData() {
+                const goals = api.getGoals();
+                const feedback = api.getFeedback();
+                let analytics = null;
+                if (['manager', 'admin'].includes(this.state.currentUser.role)) {
+                    analytics = api.getPerformanceScores();
+                }
+                this.setState({ goals, feedback, analytics });
+            }
+
+            createGoal() {
+                const { title, kpi, target, targetDate, description, priority } = this.state.newGoal;
+                if (!title || !kpi || !target || !targetDate) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+                try {
+                    api.createGoal({ title, kpi, target: parseInt(target), targetDate, description, priority });
+                    this.loadData();
+                    this.setState({ 
+                        showNewGoalForm: false, 
+                        newGoal: { title: '', description: '', targetDate: '', kpi: '', target: '', priority: 'medium' }
+                    });
+                    alert('Goal created successfully!');
+                } catch (error) {
+                    alert(error.message);
+                }
+            }
+
+            updateGoal(goalId, updates) {
+                try {
+                    api.updateGoal(goalId, updates);
+                    this.loadData();
+                } catch (error) {
+                    alert(error.message);
+                }
+            }
+
+            deleteGoal(goalId) {
+                if (confirm('Are you sure you want to delete this goal?')) {
+                    try {
+                        api.deleteGoal(goalId);
+                        this.loadData();
+                    } catch (error) {
+                        alert(error.message);
+                    }
+                }
+            }
+
+            createFeedback() {
+                const { employeeId, rating, comments } = this.state.newFeedback;
+                if (!employeeId || !comments) {
+                    alert('Please select an employee and add comments');
+                    return;
+                }
+                try {
+                    api.createFeedback({ employeeId, rating: parseInt(rating), comments, type: 'general' });
+                    this.loadData();
+                    this.setState({ 
+                        showNewFeedbackForm: false, 
+                        newFeedback: { employeeId: '', rating: 5, comments: '' }
+                    });
+                    alert('Feedback submitted successfully!');
+                } catch (error) {
+                    alert(error.message);
+                }
+            }
+
+            calculateScore(userId) {
+                const userGoals = this.state.goals.filter(g => g.employeeId === userId);
+                const userFeedback = this.state.feedback.filter(f => f.employeeId === userId);
+                if (userGoals.length === 0) return 0;
+                const goalScore = userGoals.reduce((acc, g) => acc + Math.min((g.current / g.target) * 100, 100), 0) / userGoals.length;
+                const feedbackScore = userFeedback.length > 0 ? (userFeedback.reduce((acc, f) => acc + f.rating, 0) / userFeedback.length) * 20 : 0;
+                return Math.round(goalScore * 0.6 + feedbackScore * 0.4);
+            }
+
+            render() {
+                const root = document.getElementById('app');
+                if (!this.state.isAuthenticated) {
+                    root.innerHTML = this.renderLogin();
+                } else {
+                    root.innerHTML = this.renderMain();
+                }
+                this.attachEventListeners();
+            }
+
+            renderLogin() {
+                return `
+                    <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+                        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+                            <div class="text-center mb-8">
+                                <div class="w-16 h-16 bg-indigo-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+                                    <span class="text-white text-3xl font-bold">✓</span>
+                                </div>
+                                <h1 class="text-3xl font-bold text-gray-800">Performance Review System</h1>
+                                <p class="text-gray-600 mt-2">Full-Stack Prototype Demo</p>
+                            </div>
+                            
+                            <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <p class="text-sm font-semibold text-blue-900 mb-2">Demo Accounts:</p>
+                                <div class="space-y-1 text-xs text-blue-800">
+                                    <p>• <strong>Employee:</strong> employee@company.com / employee123</p>
+                                    <p>• <strong>Manager:</strong> manager@company.com / manager123</p>
+                                    <p>• <strong>Admin:</strong> admin@company.com / admin123</p>
+                                </div>
+                            </div>
+
+                            <form id="loginForm" class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                    <input type="email" id="loginEmail" required
+                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        placeholder="email@company.com">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                                    <input type="password" id="loginPassword" required
+                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        placeholder="••••••••">
+                                </div>
+                                <button type="submit"
+                                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition shadow-md hover:shadow-lg">
+                                    Login
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderMain() {
+                const myScore = this.calculateScore(this.state.currentUser.id);
+                const myGoals = this.state.goals.filter(g => g.employeeId === this.state.currentUser.id);
+                const myFeedback = this.state.feedback.filter(f => f.employeeId === this.state.currentUser.id);
+
+                let content = '';
+                if (this.state.activeTab === 'dashboard') {
+                    content = this.renderDashboard(myScore, myGoals, myFeedback);
+                } else if (this.state.activeTab === 'goals') {
+                    content = this.renderGoals();
+                } else if (this.state.activeTab === 'feedback') {
+                    content = this.renderFeedback();
+                } else if (this.state.activeTab === 'analytics') {
+                    content = this.renderAnalytics();
+                }
+
+                return this.renderHeader() + this.renderNavigation() + `<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</div>`;
+            }
+
+            renderHeader() {
+                return `
+                    <div class="bg-white shadow-sm border-b">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
+                                        <span class="text-white font-bold">✓</span>
+                                    </div>
+                                    <div>
+                                        <h1 class="text-xl font-bold text-gray-800">Performance Review System</h1>
+                                        <p class="text-sm text-gray-600">${this.state.currentUser.firstName} ${this.state.currentUser.lastName} - ${this.state.currentUser.role.charAt(0).toUpperCase() + this.state.currentUser.role.slice(1)}</p>
+                                    </div>
+                                </div>
+                                <button onclick="app.logout()" class="flex items-center space-x-2 text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-100 transition">
+                                    <span>Logout</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderNavigation() {
+                const tabs = [
+                    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+                    { id: 'goals', label: 'Goals', icon: '🎯' },
+                    { id: 'feedback', label: 'Feedback', icon: '💬' }
+                ];
+                if (['manager', 'admin'].includes(this.state.currentUser.role)) {
+                    tabs.push({ id: 'analytics', label: 'Analytics', icon: '📈' });
+                }
+
+                return `
+                    <div class="bg-white border-b">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div class="flex space-x-8">
+                                ${tabs.map(tab => `
+                                    <button onclick="app.setState({ activeTab: '${tab.id}' })"
+                                        class="py-4 px-2 border-b-2 font-medium text-sm transition ${this.state.activeTab === tab.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-600 hover:text-gray-800'}">
+                                        ${tab.icon} ${tab.label}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderDashboard(myScore, myGoals, myFeedback) {
+                const activeGoals = myGoals.filter(g => g.status === 'in-progress').length;
+                const completedGoals = myGoals.filter(g => g.status === 'completed').length;
+                const promotion = api.getPromotion(myScore);
+
+                return `
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg shadow-lg p-6 text-white">
+                                <p class="text-indigo-100 text-sm">Performance Score</p>
+                                <p class="text-4xl font-bold mt-2">${myScore}%</p>
+                                <p class="text-indigo-100 text-xs mt-1">Based on goals & feedback</p>
+                            </div>
+                            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
+                                <p class="text-blue-100 text-sm">Active Goals</p>
+                                <p class="text-4xl font-bold mt-2">${activeGoals}</p>
+                                <p class="text-blue-100 text-xs mt-1">Completed: ${completedGoals}</p>
+                            </div>
+                            <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg p-6 text-white">
+                                <p class="text-green-100 text-sm">Promotion Status</p>
+                                <p class="text-2xl font-bold mt-2">${promotion}</p>
+                                <p class="text-green-100 text-xs mt-1">Keep up the great work!</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">Recent Feedback</h2>
+                            ${myFeedback.length === 0 ? '<p class="text-gray-500 text-center py-8">No feedback yet</p>' : `
+                                <div class="space-y-4">
+                                    ${myFeedback.slice(-3).reverse().map(f => `
+                                        <div class="border-l-4 border-indigo-600 bg-indigo-50 pl-4 py-3 rounded-r">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <span class="font-semibold text-gray-800">${f.managerName}</span>
+                                                <div class="flex items-center space-x-2">
+                                                    ${[...Array(5)].map((_, i) => `<span class="${i < f.rating ? 'text-yellow-500' : 'text-gray-300'}">★</span>`).join('')}
+                                                    <span class="font-bold text-gray-700">${f.rating}/5</span>
+                                                </div>
+                                            </div>
+                                            <p class="text-gray-700 text-sm">${f.comments}</p>
+                                            <div class="flex items-center justify-between mt-2">
+                                                <p class="text-gray-500 text-xs">📅 ${f.date}</p>
+                                                <span class="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded">${f.type}</span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderGoals() {
+                const priorityColors = {
+                    high: 'bg-red-100 text-red-800',
+                    medium: 'bg-yellow-100 text-yellow-800',
+                    low: 'bg-green-100 text-green-800'
+                };
+
+                return `
+                    <div class="space-y-6">
+                        ${this.state.currentUser.role === 'employee' ? `
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-xl font-bold text-gray-800">My Goals</h2>
+                                    <button onclick="app.setState({ showNewGoalForm: !app.state.showNewGoalForm })"
+                                        class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition shadow-md">
+                                        <span>${this.state.showNewGoalForm ? '✕ Cancel' : '+ Add Goal'}</span>
+                                    </button>
+                                </div>
+                                ${this.state.showNewGoalForm ? `
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                        <input type="text" id="goalTitle" placeholder="Goal Title *" value="${this.state.newGoal.title}"
+                                            class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                        <input type="text" id="goalKpi" placeholder="KPI Name *" value="${this.state.newGoal.kpi}"
+                                            class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                        <input type="number" id="goalTarget" placeholder="Target Value *" value="${this.state.newGoal.target}"
+                                            class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                        <input type="date" id="goalDate" value="${this.state.newGoal.targetDate}"
+                                            class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                        <select id="goalPriority" class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                            <option value="low">Low Priority</option>
+                                            <option value="medium" selected>Medium Priority</option>
+                                            <option value="high">High Priority</option>
+                                        </select>
+                                        <input type="text" id="goalDesc" placeholder="Description" value="${this.state.newGoal.description}"
+                                            class="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                        <button onclick="app.createGoal()"
+                                            class="md:col-span-2 bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition shadow-md">
+                                            💾 Create Goal
+                                        </button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">${this.state.currentUser.role === 'employee' ? 'My Goals' : 'All Goals'}</h2>
+                            <div class="space-y-4">
+                                ${this.state.goals.map(goal => {
+                                    const progress = (goal.current / goal.target) * 100;
+                                    return `
+                                        <div class="border border-gray-200 rounded-lg p-5 hover:shadow-md transition">
+                                            <div class="flex justify-between items-start mb-3">
+                                                <div class="flex-1">
+                                                    <div class="flex items-center space-x-2 mb-1">
+                                                        <h3 class="font-bold text-gray-800 text-lg">${goal.title}</h3>
+                                                        <span class="px-2 py-1 rounded text-xs font-medium ${priorityColors[goal.priority]}">${goal.priority}</span>
+                                                    </div>
+                                                    ${this.state.currentUser.role !== 'employee' ? `<p class="text-sm text-gray-600 mb-1">👤 ${goal.employeeName} • ${goal.department}</p>` : ''}
+                                                    <p class="text-sm text-gray-600">${goal.description}</p>
+                                                </div>
+                                                <div class="flex items-center space-x-2">
+                                                    <span class="px-3 py-1 rounded-full text-sm font-medium ${goal.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                                                        ${goal.status === 'completed' ? '✓ Completed' : '⏳ In Progress'}
+                                                    </span>
+                                                    ${(this.state.currentUser.role === 'manager' || this.state.currentUser.role === 'admin') ? `
+                                                        <button onclick="app.deleteGoal('${goal.id}')" class="text-red-600 hover:text-red-800 p-1" title="Delete goal">✕</button>
+                                                    ` : ''}
+                                                </div>
+                                            </div>
+                                            <div class="mt-4">
+                                                <div class="flex justify-between text-sm mb-2">
+                                                    <span class="text-gray-700 font-medium">${goal.kpi}</span>
+                                                    <span class="font-semibold text-indigo-600">${goal.current} / ${goal.target}</span>
+                                                </div>
+                                                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                                    <div class="bg-gradient-to-r from-indigo-500 to-indigo-600 h-3 rounded-full transition-all" style="width: ${Math.min(progress, 100)}%"></div>
+                                                </div>
+                                                ${this.state.currentUser.role === 'employee' && goal.status !== 'completed' ? `
+                                                    <div class="mt-3 flex items-center space-x-3">
+                                                        <input type="number" value="${goal.current}" onchange="app.updateGoal('${goal.id}', { current: parseInt(this.value) })"
+                                                            class="border border-gray-300 rounded px-3 py-1 w-24 focus:ring-2 focus:ring-indigo-500" max="${goal.target}">
+                                                        <span class="text-sm text-gray-600">Update progress</span>
+                                                    </div>
+                                                ` : ''}
+                                                <div class="mt-3 flex items-center justify-between text-xs text-gray-500">
+                                                    <span>📅 Started: ${goal.startDate}</span>
+                                                    <span>🎯 Target: ${goal.targetDate}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderFeedback() {
+                const employees = api.users.filter(u => u.role === 'employee');
+                return `
+                    <div class="space-y-6">
+                        ${(this.state.currentUser.role === 'manager' || this.state.currentUser.role === 'admin') ? `
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-xl font-bold text-gray-800">Provide Feedback</h2>
+                                    <button onclick="app.setState({ showNewFeedbackForm: !app.state.showNewFeedbackForm })"
+                                        class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition shadow-md">
+                                        <span>${this.state.showNewFeedbackForm ? '✕ Cancel' : '+ Add Feedback'}</span>
+                                    </button>
+                                </div>
+                                ${this.state.showNewFeedbackForm ? `
+                                    <div class="space-y-4 mt-4">
+                                        <select id="feedbackEmployee" class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                                            <option value="">Select Employee</option>
+                                            ${employees.map(emp => `<option value="${emp.id}">${emp.firstName} ${emp.lastName} - ${emp.department}</option>`).join('')}
+                                        </select>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Rating: <span id="ratingValue">${this.state.newFeedback.rating}</span>/5</label>
+                                            <div class="flex items-center space-x-1">
+                                                ${[1, 2, 3, 4, 5].map(star => `
+                                                    <button type="button" onclick="app.setState({ newFeedback: { ...app.state.newFeedback, rating: ${star} } })"
+                                                        class="text-3xl ${star <= this.state.newFeedback.rating ? 'text-yellow-500' : 'text-gray-300'} hover:text-yellow-400 transition">★</button>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                        <textarea id="feedbackComments" placeholder="Feedback comments..." class="w-full border border-gray-300 rounded-lg px-4 py-2 h-32 focus:ring-2 focus:ring-indigo-500"></textarea>
+                                        <button onclick="app.createFeedback()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition shadow-md">💾 Submit Feedback</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">Feedback History</h2>
+                            <div class="space-y-4">
+                                ${this.state.feedback.length === 0 ? '<p class="text-gray-500 text-center py-8">No feedback yet</p>' : this.state.feedback.map(f => `
+                                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                                        <div class="flex justify-between items-start mb-3">
+                                            <div>
+                                                ${this.state.currentUser.role !== 'employee' ? `<p class="font-semibold text-gray-800">👤 ${f.employeeName}</p>` : ''}
+                                                <p class="text-sm text-gray-600">From: ${f.managerName}</p>
+                                            </div>
+                                            <div class="flex flex-col items-end">
+                                                <div class="flex items-center space-x-1 mb-1">
+                                                    ${[...Array(5)].map((_, i) => `<span class="text-lg ${i < f.rating ? 'text-yellow-500' : 'text-gray-300'}">★</span>`).join('')}
+                                                </div>
+                                                <span class="font-bold text-lg text-gray-700">${f.rating}/5</span>
+                                            </div>
+                                        </div>
+                                        <p class="text-gray-700 mb-2">${f.comments}</p>
+                                        <div class="flex items-center justify-between text-xs text-gray-500">
+                                            <span>📅 ${f.date}</span>
+                                            <span class="bg-gray-100 text-gray-700 px-2 py-1 rounded">${f.type}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderAnalytics() {
+                if (!this.state.analytics) return '';
+                const totalEmployees = api.users.filter(u => u.role === 'employee').length;
+                const avgScore = Math.round(this.state.analytics.reduce((acc, emp) => acc + emp.overallScore, 0) / this.state.analytics.length);
+
+                return `
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <p class="text-gray-600 text-sm">Total Employees</p>
+                                <p class="text-3xl font-bold text-indigo-600 mt-2">${totalEmployees}</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <p class="text-gray-600 text-sm">Total Goals</p>
+                                <p class="text-3xl font-bold text-blue-600 mt-2">${this.state.goals.length}</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <p class="text-gray-600 text-sm">Avg Performance</p>
+                                <p class="text-3xl font-bold text-green-600 mt-2">${avgScore}%</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <h2 class="text-xl font-bold text-gray-800 mb-4">Team Performance Scores</h2>
+                                <canvas id="performanceChart" height="200"></canvas>
+                            </div>
+                            <div class="bg-white rounded-lg shadow p-6">
+                                <h2 class="text-xl font-bold text-gray-800 mb-4">Goal Status Distribution</h2>
+                                <canvas id="statusChart" height="200"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4">Employee Performance Report</h2>
+                            <div class="overflow-x-auto">
+                                <table class="w-full">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Employee</th>
+                                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Department</th>
+                                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Score</th>
+                                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Goals</th>
+                                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Promotion</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        ${this.state.analytics.map(emp => `
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-4 py-3 text-sm text-gray-800">${emp.name}</td>
+                                                <td class="px-4 py-3 text-sm text-gray-600">${emp.department}</td>
+                                                <td class="px-4 py-3 text-sm">
+                                                    <span class="font-semibold ${emp.overallScore >= 75 ? 'text-green-600' : 'text-yellow-600'}">${emp.overallScore}%</span>
+                                                </td>
+                                                <td class="px-4 py-3 text-sm text-gray-600">${emp.completedGoals}/${emp.totalGoals}</td>
+                                                <td class="px-4 py-3 text-sm">
+                                                    <span class="px-3 py-1 rounded-full text-xs font-medium ${
+                                                        emp.overallScore >= 90 ? 'bg-green-100 text-green-800' :
+                                                        emp.overallScore >= 75 ? 'bg-blue-100 text-blue-800' :
+                                                        emp.overallScore >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }">${emp.recommendation}</span>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            attachEventListeners() {
+                const loginForm = document.getElementById('loginForm');
+                if (loginForm) {
+                    loginForm.onsubmit = (e) => {
+                        e.preventDefault();
+                        this.login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value);
+                    };
+                }
+
+                const goalTitle = document.getElementById('goalTitle');
+                if (goalTitle) {
+                    goalTitle.oninput = (e) => {
+                        this.state.newGoal.title = e.target.value;
+                    };
+                }
+
+                const goalKpi = document.getElementById('goalKpi');
+                if (goalKpi) {
+                    goalKpi.oninput = (e) => {
+                        this.state.newGoal.kpi = e.target.value;
+                    };
+                }
+
+                const goalTarget = document.getElementById('goalTarget');
+                if (goalTarget) {
+                    goalTarget.oninput = (e) => {
+                        this.state.newGoal.target = e.target.value;
+                    };
+                }
+
+                const goalDate = document.getElementById('goalDate');
+                if (goalDate) {
+                    goalDate.onchange = (e) => {
+                        this.state.newGoal.targetDate = e.target.value;
+                    };
+                }
+
+                const goalPriority = document.getElementById('goalPriority');
+                if (goalPriority) {
+                    goalPriority.onchange = (e) => {
+                        this.state.newGoal.priority = e.target.value;
+                    };
+                }
+
+                const goalDesc = document.getElementById('goalDesc');
+                if (goalDesc) {
+                    goalDesc.oninput = (e) => {
+                        this.state.newGoal.description = e.target.value;
+                    };
+                }
+
+                const feedbackEmployee = document.getElementById('feedbackEmployee');
+                if (feedbackEmployee) {
+                    feedbackEmployee.onchange = (e) => {
+                        this.state.newFeedback.employeeId = e.target.value;
+                    };
+                }
+
+                const feedbackComments = document.getElementById('feedbackComments');
+                if (feedbackComments) {
+                    feedbackComments.oninput = (e) => {
+                        this.state.newFeedback.comments = e.target.value;
+                    };
+                }
+
+                if (this.state.activeTab === 'analytics' && this.state.analytics) {
+                    setTimeout(() => this.renderCharts(), 100);
+                }
+            }
+
+            renderCharts() {
+                Object.values(this.charts).forEach(chart => chart && chart.destroy());
+                this.charts = {};
+
+                const teamPerformance = this.state.analytics.slice(0, 5).map(emp => ({
+                    name: emp.name.split(' ')[0],
+                    score: emp.overallScore
+                }));
+
+                const perfCtx = document.getElementById('performanceChart');
+                if (perfCtx) {
+                    this.charts.performance = new Chart(perfCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: teamPerformance.map(d => d.name),
+                            datasets: [{
+                                label: 'Performance Score',
+                                data: teamPerformance.map(d => d.score),
+                                backgroundColor: '#4f46e5'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: { y: { beginAtZero: true, max: 100 } }
+                        }
+                    });
+                }
+
+                const statusCtx = document.getElementById('statusChart');
+                if (statusCtx) {
+                    const completed = this.state.goals.filter(g => g.status === 'completed').length;
+                    const inProgress = this.state.goals.filter(g => g.status === 'in-progress').length;
+
+                    this.charts.status = new Chart(statusCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Completed', 'In Progress'],
+                            datasets: [{
+                                data: [completed, inProgress],
+                                backgroundColor: ['#10b981', '#f59e0b']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                }
+            }
+        }
+
+        app = new App();
+    </script>
+</body>
+</html>
