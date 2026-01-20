@@ -120,7 +120,7 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 
 ## 📸 Screenshots
 
-*Add screenshots here after deployment*
+*Will add screenshots here after deployment*
 
 ## 🤝 Contributing
 
@@ -136,7 +136,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👨‍💻 Author
 
-Your Name - [Shravani Ranshevare](https://github.com/ShravaniRanshevare?tab=repositories)
+[Shravani Ranshevare](https://github.com/ShravaniRanshevare?tab=repositories)
 
 ## 🙏 Acknowledgments
 
