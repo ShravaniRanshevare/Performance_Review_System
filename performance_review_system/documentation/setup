@@ -1,0 +1,41 @@
+Install Dependencies:
+
+bashnpm install
+
+Create PostgreSQL Database:
+
+bashcreatedb performance_review
+
+Run the Schema:
+
+bashpsql -U postgres -d performance_review -f schema.sql
+
+Configure Environment:
+Create .env file with your database credentials (see package.json artifact)
+Start Server:
+
+bashnpm run dev
+📊 Performance Scoring Formula
+The system calculates scores automatically:
+
+60% from goal completion
+40% from manager feedback ratings
+
+🔗 Connect to Frontend
+Update your React frontend to use these endpoints:
+javascript
+const API_BASE_URL = 'http://localhost:3000/api';
+
+// Login example
+const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password })
+});
+
+// Protected endpoint example
+const goalsResponse = await fetch(`${API_BASE_URL}/goals`, {
+  headers: { 
+    'Authorization': `Bearer ${token}` 
+  }
+});

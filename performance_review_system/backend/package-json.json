@@ -1,0 +1,48 @@
+{
+  "name": "performance-review-api",
+  "version": "1.0.0",
+  "description": "Employee Performance Review System API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "db:setup": "psql -U postgres -f database/schema.sql",
+    "test": "jest --coverage"
+  },
+  "keywords": ["performance", "review", "hr", "api"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  }
+}
+
+// .env.example
+PORT=3000
+NODE_ENV=development
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=performance_review
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_EXPIRES_IN=24h
+
+# CORS Configuration
+CORS_ORIGIN=http://localhost:5173
